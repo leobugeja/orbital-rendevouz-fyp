@@ -1,14 +1,16 @@
+% Requires Aerospace block set
 clc
 clear
 close all
 addpath('eci2orb_gooding','multicomplex')
 
 %% INITIAL VARIABLES
-num_orbits = 10;
-dt = 1; % in seconds
-reference_altitude = 320e3;
-y0 = [0 0 0 1 1 0]; % [x0 y0 z0 xdot0 ydot0 zdot0] [0 0 0 40 0 0]
+num_orbits = 5;
+dt = 10; % in seconds
 animation_increments = 10;
+reference_altitude = 320e3;
+y0 = [40 0 0 0 0 0]; % [x0 y0 z0 xdot0 ydot0 zdot0] [0 0 0 40 0 0]
+
 
 %RESULTING VARIABLES
 mu = 3.986004418e14;
@@ -25,8 +27,11 @@ tspan = [0:dt:round(P)*num_orbits];
 %% Calculate Exact Orbit
 %{
 ECEF = cylindrical_to_ECEF(y0,t(1),omega,r0); % Earth Centered Earth Fixed
-r = ECEF(1:3);
-v = ECEF(4:6);
+r = ECEF(1:3)./1000; % convert to km
+v = ECEF(4:6)./1000; % convert to km/s
+[a, ecc, incl, RAAN, argp, nu] = eci2orb_gooding(mu, r, v)
+keplerian2ijk(a, ecc, incl, abs(RAAN), argp, nu)
+
 h = cross(ECEF(1:3),ECEF(4:6));
 nhat=cross([0 0 1],h);
 
@@ -69,8 +74,10 @@ earth_spacecraft_orbit = zeros(size(t_array,1),3);
 earth_reference_orbit = zeros(size(t_array,1),3);
 for k = 1:size(t_array,2)
    exact_sol(k,:) = CW_solution(omega, t_array(k), y0); % relative spacecraft to reference position
-   earth_spacecraft_orbit(k,:) = cylindrical_to_ECEF(exact_sol(k,:),t_array(k),omega,r0); % spacecraft orbit - earth centered
-   earth_reference_orbit(k,:) = cylindrical_to_ECEF([0 0 0 0 0 0],t_array(k),omega,r0); % reference orbit - earth centered
+   ECEF_spacecraft = cylindrical_to_ECEF(exact_sol(k,:),t_array(k),omega,r0);
+   ECEF_reference = cylindrical_to_ECEF([0 0 0 0 0 0],t_array(k),omega,r0);
+   earth_spacecraft_orbit(k,:) = ECEF_spacecraft(1:3); % spacecraft orbit - earth centered
+   earth_reference_orbit(k,:) = ECEF_reference(1:3); % reference orbit - earth centered
 end
 
 
@@ -96,14 +103,14 @@ end
 %% PLOT EARTH SPHERE and Setup Tiles
 t = tiledlayout(2,2);
 t.TileSpacing = 'none';
-t.Padding = 'tight'
+t.Padding = 'tight';
 
 %figure('Renderer', 'painters', 'Position', [100 100 1300 900])
 hold on
 nexttile(1)
-sphere_size = 6371e3;
-[X,Y,Z] = sphere(50);
-surf(X*sphere_size,Y*sphere_size,Z*sphere_size);
+%sphere_size = 6371e3;
+%[X,Y,Z] = sphere(50);
+%surf(X*sphere_size,Y*sphere_size,Z*sphere_size);
 
 %% PLOTTING FIXED LINES
 nexttile(1)
@@ -122,10 +129,23 @@ hold on
 plot(exact_sol(:,4),exact_sol(:,5),'r');
 plot(ode_sol(:,4),ode_sol(:,5),'g');
 plot(euler_sol(:,4),euler_sol(:,5),'b');
+figure(2)
+hold on
+%plot(earth_reference_orbit(:,2))
+%plot(earth_reference_orbit(:,1))
+%plot(earth_spacecraft_orbit(:,2))
+%plot(earth_reference_orbit(:,2)-earth_spacecraft_orbit(:,2))
+plot(100*(exact_sol(:,1)-euler_sol(:,1))./exact_sol(:,1));
+plot(100*(exact_sol(:,2)-euler_sol(:,2))./exact_sol(:,2));
 
 
 
 %% Plot Settings
+figure(2)
+legend('euler y error','euler x error')
+xlabel('time (s)')
+ylabel('% error')
+figure(1)
 nexttile(1)
 axis equal
 xlabel('x')
@@ -139,8 +159,8 @@ set(gca, 'xdir', 'reverse')
 ylabel('x_{relative}')
 xlabel('y_{relative}')
 zlabel('z_{relative}')
-x_border = range(exact_sol(:,2))*0.3 + 1;
-y_border = range(exact_sol(:,1))*0.3 + 1;
+x_border = range(exact_sol(:,2))*0.1 + 1;
+y_border = range(exact_sol(:,1))*0.1 + 1;
 xlim([min(exact_sol(:,2))-x_border max(exact_sol(:,2))+x_border])
 ylim([min(exact_sol(:,1))-y_border max(exact_sol(:,1))+y_border])
 %legend('Exact HW Solution','ODE Solver HW Solution','Euler Solution','AutoUpdate','off') 
@@ -154,8 +174,8 @@ nexttile(4)
 xlabel('xdot_{relative}')
 ylabel('ydot_{relative}')
 zlabel('zdot_{relative}')
-x_border = range(exact_sol(:,4))*0.3 + 1;
-y_border = range(exact_sol(:,5))*0.3 + 1;
+x_border = range(exact_sol(:,4))*0.1 + 0.5;
+y_border = range(exact_sol(:,5))*0.1 + 0.5;
 xlim([min(exact_sol(:,4))-x_border max(exact_sol(:,4))+x_border])
 ylim([min(exact_sol(:,5))-y_border max(exact_sol(:,5))+y_border])
 legend('Exact HW Solution','ODE Solver HW Solution','Euler Solution','AutoUpdate','off') 
@@ -189,6 +209,7 @@ animated_earth_spacecraft_dot2 = animatedline('Marker','x','MarkerSize',4,'LineW
 animated_earth_reference_dot2 = animatedline('Marker','o','MarkerSize',4,'LineWidth',2,'Color','b', 'MaximumNumPoints',1);
 nexttile(2)
 animated_relative_pos = animatedline('Marker','x','LineWidth',2,'Color','r', 'MaximumNumPoints',1);
+animated_relative_pos_euler = animatedline('Marker','x','LineWidth',2,'Color','k', 'MaximumNumPoints',1);
 nexttile(4)
 animated_relative_speed = animatedline('Marker','x','LineWidth',2,'Color','r', 'MaximumNumPoints',1);
 
@@ -203,6 +224,7 @@ for k = 1:animation_increments:length(t_array)
     addpoints(animated_earth_spacecraft_dot2,earth_spacecraft_orbit(k,1),earth_spacecraft_orbit(k,2),earth_spacecraft_orbit(k,3));
     nexttile(2)
     addpoints(animated_relative_pos,exact_sol(k,2),exact_sol(k,1));
+    addpoints(animated_relative_pos_euler,euler_sol(k,2),euler_sol(k,1));
     nexttile(4)
     addpoints(animated_relative_speed,exact_sol(k,4),exact_sol(k,5));
     drawnow

@@ -1,4 +1,4 @@
-function oev = eci2orb_gooding (cbmu, r, v)
+function [a, ecc, incl, RAAN, argp, nu] = eci2orb_gooding(cbmu, r, v)
 
 % conversion of three-dimensional position and
 % velocity vectors to classical orbital elements
@@ -144,6 +144,15 @@ oev(5) = bom;
 % true anomaly (radians)
 
 oev(6) = mod(u - om, 2.0 * pi);
+
+a = oev(1);
+ecc = oev(2);
+incl = oev(3);
+RAAN = oev(4);
+argp = oev(5);
+nu = oev(6);
+
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
