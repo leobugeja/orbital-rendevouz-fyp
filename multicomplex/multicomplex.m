@@ -184,12 +184,27 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
             % the for loop inside the addition and substraction operator
             % overloading allows for the elementswise addition and
             % substraction of same sized arrays of multicomplex numbers.
-            
-            siz=size(obj1);
-            %outfor = zeros(1,siz(2));
-            for i=1:siz(2)
-                [obj11,obj21] = consimulti(obj1(i),obj2(i));
-                outfor(i)=multicomplex(obj11.zn+obj21.zn);
+            if size(obj1)==size(obj2)
+                for i = 1:size(obj1,1)
+                    for j = 1:size(obj1,2)
+                        [obj11,obj21] = consimulti(obj1(i,j),obj2(i,j));
+                        outfor(i,j) = multicomplex(obj11.zn+obj21.zn);
+                    end
+                end
+            elseif size(obj1)==[1,1]
+                for i = 1:size(obj2,1)
+                    for j = 1:size(obj2,2)
+                        [obj11,obj21] = consimulti(obj1,obj2(i,j));
+                        outfor(i,j) = multicomplex(obj11.zn+obj21.zn);
+                    end
+                end
+            elseif size(obj2)==[1,1]
+                for i = 1:size(obj1,1)
+                    for j = 1:size(obj1,2)
+                        [obj11,obj21] = consimulti(obj1(i,j),obj2);
+                        outfor(i,j) = multicomplex(obj11.zn+obj21.zn);
+                    end
+                end
             end
             out=outfor;
         end
@@ -198,11 +213,27 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
             
             % Same algorithm structure as the addition operator.
             
-            siz=size(obj1);
-            %outfor = zeros(1,siz(2));
-            for i=1:siz(2)
-                [obj11,obj21] = consimulti(obj1(i),obj2(i));
-                outfor(i) = multicomplex(obj11.zn-obj21.zn);
+            if size(obj1)==size(obj2)
+                for i = 1:size(obj1,1)
+                    for j = 1:size(obj1,2)
+                        [obj11,obj21] = consimulti(obj1(i,j),obj2(i,j));
+                        outfor(i,j) = multicomplex(obj11.zn-obj21.zn);
+                    end
+                end
+            elseif size(obj1)==[1,1]
+                for i = 1:size(obj2,1)
+                    for j = 1:size(obj2,2)
+                        [obj11,obj21] = consimulti(obj1,obj2(i,j));
+                        outfor(i,j) = multicomplex(obj11.zn-obj21.zn);
+                    end
+                end
+            elseif size(obj2)==[1,1]
+                for i = 1:size(obj1,1)
+                    for j = 1:size(obj1,2)
+                        [obj11,obj21] = consimulti(obj1(i,j),obj2);
+                        outfor(i,j) = multicomplex(obj11.zn-obj21.zn);
+                    end
+                end
             end
             out=outfor;
         end
@@ -267,9 +298,61 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
             
             % Multiplication was found to be most efficient wit the built
             % in matrix multiplication
+            if and(size(self)==[1 1],size(other)==[1 1])
+                [self,other] = consimulti(self,other);
+                outfor=multicomplex(arrayM(matrep(self)*matrep(other)));           
             
-            [self,other] = consimulti(self,other);
-            out=multicomplex(arrayM(matrep(self)*matrep(other)));
+            %{
+            elseif or(size(self)==[1 1],size(other)==[1 1])
+                if size(self)==[1 1]
+                    constant = self;
+                    matrix = other;
+                else
+                    constant = other;
+                    matrix = self;
+                end
+                out = cell(size(matrix));
+                for i = 1:size(matrix,1)
+                    for j = 1:size(matrix,2)
+                        out{i,j} = constant*matrix(i,j);
+                    end
+                end
+                out = [out{:,:}];
+            %}
+            elseif isequal(size(self),[1 1]) % treat self = constant, other = matrix
+                %out = cell(size(other));
+                for i = 1:size(other,1)
+                    for j = 1:size(other,2)
+                        outfor(i,j) = self*other(i,j);
+                    end
+                end
+                %out = [out{:,:}];
+              
+            elseif isequal(size(other),[1 1]) % treat self = matrix, other = constant
+                %out = cell(size(self));
+                for i = 1:size(self,1)
+                    for j = 1:size(self,2)
+                        outfor(i,j) = other*self(i,j);
+                    end
+                end
+                %out = [out{:,:}];
+            
+            elseif size(self,2) == size(other,1) % self = matrix, other = matrix, with suitable dimensions to perform matrix multiplication
+                %out = cell(size(self,1),size(other,2));
+                for i = 1:size(self,1)
+                    for j = 1:size(other,2)
+                        sum = 0;
+                        for k = 1:size(self,2)
+                           sum = sum + self(i,k)*other(k,j); 
+                        end
+                        outfor(i,j) = sum;
+                    end
+                end
+                %out = [out{:,:}];
+            else
+                error('Error using  *, Incorrect dimensions for matrix multiplication. Check that the number of columns in the first matrix matches the number of rows in the second matrix. To perform elementwise multiplication, use ''.*''.');
+            end
+            out = outfor;
         end
         
         function out = mrdivide(self,other)                       % Division
@@ -333,7 +416,7 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
                     
                 else
 
-                    out = multicomplex(arrayM(findk(matrep(input),p))); % for fractional power
+                    out = multicomplex(arrayM(fractionalpow(matrep(input),p))); % for fractional power
 
                 end
             end
@@ -723,10 +806,18 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
         end
         
         %% Utility functions %%
+        function out = real(C)
+            % This function extracts the real part of a multicomplex number or multicomplex matrix
+            for i = 1:size(C,1)
+                for j = 1:size(C,2)
+                    out(i,j) = C(i,j).zn(1);
+                end
+            end                  
+        end
         
         function out = imgn(C)
             
-            % This function essentially ust extracts the 'last' imaginary term, or the
+            % This function essentially extracts the 'last' imaginary term, or the
             % one that contains all of the imaginary terms.
             
             out=C.zn(end);
@@ -737,7 +828,7 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
         function out = CX2(C,im,in)
             
             % This function extracts the coefficient of the user inputed imaginary part inim. C is the multicomplex number
-            % you wan to extract the coefficient of. Ex: CX2(C,3,4) extracts the i3i4 coefficient of C.
+            % you want to extract the coefficient of. Ex: CX2(C,3,4) extracts the i3i4 coefficient of C.
             % It is useful for second partial derivative calculation.
             
             if im > in

@@ -6,10 +6,10 @@ addpath('eci2orb_gooding','multicomplex')
 
 %% INITIAL VARIABLES
 num_orbits = 1;
-dt = 50; % in seconds
-animation_increments = 5;
+dt = 10; % in seconds
+animation_increments = 10;
 reference_altitude = 320e3;
-y0 = [40 -400 100 0 0 0]; % [x0 y0 z0 xdot0 ydot0 zdot0] [0 0 0 40 0 0]
+y0 = [40 -400 1000 0 0 0]; % [x0 y0 z0 xdot0 ydot0 zdot0] [0 0 0 40 0 0]
 
 
 %RESULTING VARIABLES
@@ -126,21 +126,25 @@ for k = 2:length(t_array)
 end
 
 %% Control Solution
-state_traj = zeros(length(t_array),6);
-state_traj(1,:) = y0;
+complex_state_traj = cell(length(t_array),1);
+real_state_traj = zeros(length(t_array),6);
+complex_state_traj{1} = y0';
+real_state_traj(1,:) = y0;
 
-control_traj = zeros(length(t_array),3);
 for i = 1:length(t_array)
-    control_traj(i,1) = -0.00001*multicomplex(inputconverter(1,[1],1e-10));
-    control_traj(i,2) = -0.00001*multicomplex(inputconverter(1,[2],1e-10));
-    control_traj(i,3) = -0.00001*multicomplex(inputconverter(1,[3],1e-10));
+    control_traj{i,1} = -0.00001*multicomplex(inputconverter(1,[1],1e-10));
+    control_traj{i,2} = -0.00001*multicomplex(inputconverter(1,[2],1e-10));
+    control_traj{i,3} = -0.00001*multicomplex(inputconverter(1,[3],1e-10));
 end
 
 STM = (I + dt*A + dt^2*A^2/2 + dt^3*A^3/6 + dt^4*A^4/24); % State Transition Matrix
 CTM = (dt*eye(6) + dt^2*A/2 + dt^3*A^2/6 + dt^4*A^3/24); % Control Transition Matrix inv(A)*(STM - eye(6))
 for k = 2:length(t_array)
-    state_traj(k,:) = STM*state_traj(k-1,:)' + CTM*B*control_traj(k,:)';
+    complex_state_traj{k} = STM*complex_state_traj{k-1} + CTM*B*[control_traj{k,:}]';
+    real_state_traj(k,:) = real(complex_state_traj{k});
 end
+
+
 
 %% PLOT EARTH SPHERE and Setup Tiles
 t = tiledlayout(2,3);
@@ -165,8 +169,8 @@ plot3(CW_sol(:,2),CW_sol(:,1),CW_sol(:,3),'r');
 %plot(ode_sol(:,2),ode_sol(:,1),'g');
 %plot(euler_sol(:,2),euler_sol(:,1),'b');
 %plot(RK_sol(:,2),RK_sol(:,1),'k');
-plot3(state_traj(:,2),state_traj(:,1),state_traj(:,3),'b');
-
+plot3(real_state_traj(:,2),real_state_traj(:,1),real_state_traj(:,3),'b');
+plot3(0,0,0,'og')
 
 nexttile(4)
 hold on
@@ -174,8 +178,8 @@ plot3(CW_sol(:,4),CW_sol(:,5),CW_sol(:,6),'r');
 %plot(ode_sol(:,4),ode_sol(:,5),'g');
 %plot(euler_sol(:,4),euler_sol(:,5),'b');
 %plot(RK_sol(:,4),RK_sol(:,5),'k');
-plot3(state_traj(:,4),state_traj(:,5),state_traj(:,6),'b');
-
+plot3(real_state_traj(:,4),real_state_traj(:,5),real_state_traj(:,6),'b');
+plot3(0,0,0,'og')
 %{
 nexttile(5)
 hold on
@@ -238,14 +242,14 @@ ylabel('$x_{rel}$ (m)','Interpreter','latex')
 xlabel('$y_{rel}$ (m)','Interpreter','latex')
 zlabel('$z_{rel}$ (m)','Interpreter','latex')
 set(get(gca,'ZLabel'),'Rotation',0)
-x_border = range(state_traj(:,2))*0.1 + 1;
-y_border = range(state_traj(:,1))*0.1 + 1;
-z_border = range(state_traj(:,3))*0.1 + 1;
+x_border = range(real_state_traj(:,2))*0.1 + 1;
+y_border = range(real_state_traj(:,1))*0.1 + 1;
+z_border = range(real_state_traj(:,3))*0.1 + 1;
 %xlim([min(state_traj(:,2))-x_border max(state_traj(:,2))+x_border])
 %ylim([min(state_traj(:,1))-y_border max(state_traj(:,1))+y_border])
 %zlim([min(state_traj(:,3))-z_border max(state_traj(:,3))+z_border])
 view([-10 65])
-legend('Zero Control Trajectory', 'Controlled Trajectory','AutoUpdate','off') 
+legend('Zero Control Trajectory', 'Controlled Trajectory','Target','AutoUpdate','off') 
 nexttile(3)
 axis equal
 xlabel('$x$ (m)','Interpreter','latex')
@@ -260,11 +264,11 @@ xlabel('$\dot x_{rel}$ (m)','Interpreter','latex')
 ylabel('$\dot y_{rel}$ (m)','Interpreter','latex')
 zlabel('$\dot z_{rel}$ (m)','Interpreter','latex')
 set(get(gca,'ZLabel'),'Rotation',0)
-x_border = range(state_traj(:,4))*0.1 + 0.5;
-y_border = range(state_traj(:,5))*0.1 + 0.5;
+x_border = range(real_state_traj(:,4))*0.1 + 0.5;
+y_border = range(real_state_traj(:,5))*0.1 + 0.5;
 %xlim([min(state_traj(:,4))-x_border max(state_traj(:,4))+x_border])
 %ylim([min(state_traj(:,5))-y_border max(CW_sol(:,5))+y_border])
-legend('Zero Control Trajectory', 'Controlled Trajectory','AutoUpdate','off') 
+legend('Zero Control Trajectory', 'Controlled Trajectory','Target','AutoUpdate','off') 
 %{
 nexttile(5)
 xlabel('x')
@@ -308,10 +312,10 @@ nexttile(1)
 animated_earth_reference_dot = animatedline('Marker','x','MarkerSize',4,'LineWidth',2,'Color','r', 'MaximumNumPoints',1);
 animated_earth_spacecraft_dot = animatedline('Marker','o','LineWidth',2,'Color','b', 'MaximumNumPoints',1);
 nexttile(3)
-animated_earth_spacecraft_orbit = animatedline('LineWidth',1,'Color','r', 'MaximumNumPoints',5);
-animated_earth_reference_orbit = animatedline('LineWidth',1,'Color','b', 'MaximumNumPoints',5);
-animated_earth_spacecraft_dot2 = animatedline('Marker','x','MarkerSize',4,'LineWidth',2,'Color','r', 'MaximumNumPoints',1);
-animated_earth_reference_dot2 = animatedline('Marker','o','MarkerSize',4,'LineWidth',2,'Color','b', 'MaximumNumPoints',1);
+animated_earth_spacecraft_orbit = animatedline('LineWidth',1,'Color','b', 'MaximumNumPoints',2);
+animated_earth_reference_orbit = animatedline('LineWidth',1,'Color','g', 'MaximumNumPoints',2);
+animated_earth_spacecraft_dot2 = animatedline('Marker','x','MarkerSize',4,'LineWidth',2,'Color','b', 'MaximumNumPoints',1);
+animated_earth_reference_dot2 = animatedline('Marker','o','MarkerSize',4,'LineWidth',2,'Color','g', 'MaximumNumPoints',1);
 nexttile(2)
 animated_relative_pos = animatedline('Marker','x','LineWidth',2,'Color','r', 'MaximumNumPoints',1);
 animated_relative_pos_traj = animatedline('Marker','x','LineWidth',2,'Color','b', 'MaximumNumPoints',1);
@@ -330,10 +334,10 @@ for k = 1:animation_increments:length(t_array)
     addpoints(animated_earth_spacecraft_dot2,earth_spacecraft_orbit(k,1),earth_spacecraft_orbit(k,2),earth_spacecraft_orbit(k,3));
     nexttile(2)
     addpoints(animated_relative_pos,CW_sol(k,2),CW_sol(k,1),CW_sol(k,3));
-    addpoints(animated_relative_pos_traj,state_traj(k,2),state_traj(k,1),state_traj(k,3));
+    addpoints(animated_relative_pos_traj,real_state_traj(k,2),real_state_traj(k,1),real_state_traj(k,3));
     nexttile(4)
     addpoints(animated_relative_speed,CW_sol(k,4),CW_sol(k,5),CW_sol(k,6));
-    addpoints(animated_relative_speed_traj,state_traj(k,4),state_traj(k,5),state_traj(k,6));
+    addpoints(animated_relative_speed_traj,real_state_traj(k,4),real_state_traj(k,5),real_state_traj(k,6));
     drawnow
 end
 
