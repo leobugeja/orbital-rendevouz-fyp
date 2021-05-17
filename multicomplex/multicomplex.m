@@ -990,6 +990,36 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
             
         end
         
+        
+        function out = repr(self)
+            % This function returns a string representation of the multicomplex number
+                        
+            imag_strings = strings(length(self.zn),1);
+            complex_order = log(length(self.zn))/log(2);
+            
+            for n = 1:complex_order
+                imag_strings(2^(n-1)+1) = "i" + n;
+                for i = 2^(n-1)+2: 2^(n)
+                    imag_strings(i) = string(imag_strings(i-2^(n-1))) + string(imag_strings(2^(n-1)+1));
+                end
+            end
+            
+            string_mat = strings(0);
+            if self.zn(1) ~= 0
+                string_mat(1) = string(self.zn(1));
+            end
+            for i = 2:length(self.zn)
+                if self.zn(i) ~= 0
+                    string_mat(end+1) = string(self.zn(i)) + " * " + string(imag_strings(i));                  
+                end
+            end
+            
+            if isempty(string_mat)
+                out = "0";  
+            else
+                out = join(string_mat, "  +  ");
+            end
+        end
     end
     
 end
