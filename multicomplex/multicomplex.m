@@ -824,6 +824,9 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
             
         end
         
+        function out = imgn_nth(C,n)
+            out=C.zn(2^(n-1)+1);
+        end
         
         function out = CX2(C,im,in)
             

@@ -102,18 +102,36 @@ x_control(t) = polyfit(linspace(0,t_array(end),length(x_spline)), x_spline, leng
 y_control(t) = polyfit(linspace(0,t_array(end),length(y_spline)), y_spline, length(y_spline)-1);
 z_control(t) = polyfit(linspace(0,t_array(end),length(z_spline)), z_spline, length(z_spline)-1);
 %}
-     
+
+fd_state_traj.ax = zeros(length(t_array),6);
+fd_state_traj.ay = zeros(length(t_array),6);
+fd_state_traj.az = zeros(length(t_array),6);
+fd_state_traj.ax(1,:) = y0;
+fd_state_traj.ay(1,:) = y0;
+fd_state_traj.az(1,:) = y0;
+fd_control_traj.ax = zeros(length(t_array),3);
+fd_control_traj.ay = zeros(length(t_array),3);
+fd_control_traj.az = zeros(length(t_array),3);
+fd_control_step = 1e-15;
+
+control_traj = cell(length(t_array),3);
+control_traj(:,:) = {0};
 complex_state_traj = cell(length(t_array),1);
 complex_state_traj{1} = y0';
 real_state_traj = zeros(length(t_array),6);
 real_state_traj(1,:) = y0;
-control_traj = cell(length(t_array),3);
-control_traj(:,:) = {0};
+
+control_perturbation.ax = multicomplex(inputconverter(0,1,1e-10));
+control_perturbation.ay = multicomplex(inputconverter(0,2,1e-10));
+control_perturbation.az = multicomplex(inputconverter(0,3,1e-10));
 
 for i = 1:round(length(t_array))
-    control_traj{i,1} = -0.00019*multicomplex(inputconverter(1,1,1e-10));
-    control_traj{i,2} = -0.000002*multicomplex(inputconverter(1,2,1e-10));
-    control_traj{i,3} = 0.0012*multicomplex(inputconverter(1,3,1e-10));
+    control_traj{i,1} = -0.00018 + control_perturbation.ax;
+    control_traj{i,2} = -0.000002 + control_perturbation.ay;
+    control_traj{i,3} = 0.0012 + control_perturbation.az;
+    fd_control_traj.ax(i,:) = [-0.00018+fd_control_step,-0.000002,0.0012];
+    fd_control_traj.ay(i,:) = [-0.00018,-0.000002+fd_control_step,0.0012];
+    fd_control_traj.az(i,:) = [-0.00018,-0.000002,0.0012+fd_control_step];
 end
 
 STM = (eye(6) + dt*A + dt^2*A^2/2 + dt^3*A^3/6 + dt^4*A^4/24); % State Transition Matrix
@@ -121,6 +139,10 @@ CTM = (dt*eye(6) + dt^2*A/2 + dt^3*A^2/6 + dt^4*A^3/24); % Control Transition Ma
 for k = 2:length(t_array)
     complex_state_traj{k} = STM*complex_state_traj{k-1} + CTM*B*[control_traj{k,:}]';
     real_state_traj(k,:) = real(complex_state_traj{k});
+    
+    fd_state_traj.ax(k,:) = STM*fd_state_traj.ax(k-1,:)' + CTM*B*fd_control_traj.ax(k,:)';
+    fd_state_traj.ay(k,:) = STM*fd_state_traj.ay(k-1,:)' + CTM*B*fd_control_traj.ay(k,:)';
+    fd_state_traj.az(k,:) = STM*fd_state_traj.az(k-1,:)' + CTM*B*fd_control_traj.az(k,:)';
 end
 
 %% Proportional Controler
@@ -159,6 +181,25 @@ for k = 2:length(t_array)
     tay_sol(k,:) = ( (eye(6) + dt*A + dt^2*A^2/2 + dt^3*A^3/6 + dt^4*A^4/24)*tay_sol(k-1,:)' )';
 end
 %}
+
+%% Final State and Cost Functions
+final_state = strings(size(complex_state_traj{end},1),1);
+for i = 1:size(complex_state_traj{end},1)
+    final_state(i) = repr(complex_state_traj{end}(i));
+end
+
+for i = 1:6
+    complex_sensitivity(i,1) = imgn_nth(complex_state_traj{end}(i),1)/imgn_nth(control_perturbation.ax,1);
+    complex_sensitivity(i,2) = imgn_nth(complex_state_traj{end}(i),2)/imgn_nth(control_perturbation.ay,2);
+    complex_sensitivity(i,3) = imgn_nth(complex_state_traj{end}(i),3)/imgn_nth(control_perturbation.az,3);
+end
+
+fd_sensitivity(:,1) = (fd_state_traj.ax(end,:) - real_state_traj(end,:))'./fd_control_step;
+fd_sensitivity(:,2) = (fd_state_traj.ay(end,:) - real_state_traj(end,:))'./fd_control_step;
+fd_sensitivity(:,3) = (fd_state_traj.az(end,:) - real_state_traj(end,:))'./fd_control_step;
+
+control_cost = sum_control_cost(control_traj,dt);
+
 
 %% Plotting Inanimate Curves
 figure('Renderer', 'painters', 'Position', [400 10 1300 900])
@@ -422,15 +463,6 @@ end
 
 
 t_array = t_array';
-
-%% Final State and Cost Functions
-final_state = strings(size(complex_state_traj{end},1),1);
-for i = 1:size(complex_state_traj{end},1)
-    final_state(i) = repr(complex_state_traj{end}(i));
-end
-
-control_cost = sum_control_cost(control_traj,dt);
-
 
 %% Functions
 %{
