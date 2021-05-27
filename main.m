@@ -3,10 +3,17 @@ clear
 close all
 addpath('multicomplex')
 
+%CW_trajectory([40 -400 500 0 0 1], 408e3, 5, 1000)
+%cal_trajectory([-0.00018, -0.000002, 0.0012], [40 -400 500 0 0 1], 408e3, 5, 1000, 1e-15);
+%[control_parameters,fval] = OptimiseTrajectory([-0.00018, -0.000002, 0.0012], [40 -400 500 0 0 1],  408e3, 5, 1000, 1e-15);
+%BacktrackLineMethod([-0.00018, -0.000002, 0.0012], [40 -40 500 1 1 1],  408e3, 5, 1000, 1e-15);
+
 %% Initializing Variables
-num_orbits = 0.82;
-dt = 20; % in seconds
-animation_increments = 10;
+%num_orbits = 0.82;
+h = 1e-15;
+dt = multicomplex(inputconverter(5,4,h)); % in seconds
+num_steps = 1000; % round(P*num_orbits/dt)
+animation_increments = 50;
 reference_altitude = 408e3;
 y0 = [40 -400 500 0 0 1]; % [x0 y0 z0 xdot0 ydot0 zdot0]
 
@@ -15,7 +22,10 @@ mu = 3.986004418e14;
 r0 = 6371e3 + reference_altitude;
 omega = sqrt(mu/r0^3);
 P = (2*pi*1/omega);
-t_array = 0:dt:round(P)*num_orbits;
+for k = 1:num_steps
+    t_array(k) = k*dt;
+end
+%t_array = 0:dt:t_duration;
 
 %% Calculate Exact Orbit
 %{
@@ -70,13 +80,14 @@ end
 %}
 
 %% CW Solution (Clohessy-Wiltshire)
-CW_sol = zeros(length(t_array),6);
-ECEF_spacecraft = zeros(length(t_array),3);
-ECEF_reference = zeros(length(t_array),3);
+t_array_real = real(t_array);
+CW_sol = zeros(length(t_array_real),6);
+ECEF_spacecraft = zeros(length(t_array_real),3);
+ECEF_reference = zeros(length(t_array_real),3);
 for k = 1:size(t_array,2)
-   CW_sol(k,:) = CW_solution(omega, t_array(k), y0); % relative spacecraft to reference position
-   [ECEF_spacecraft(k,:),~] = cylindrical_to_ECEF(CW_sol(k,:),t_array(k),omega,r0);
-   [ECEF_reference(k,:),~] = cylindrical_to_ECEF([0 0 0 0 0 0],t_array(k),omega,r0);
+   CW_sol(k,:) = CW_solution(omega, t_array_real(k), y0); % relative spacecraft to reference position
+   [ECEF_spacecraft(k,:),~] = cylindrical_to_ECEF(CW_sol(k,:),t_array_real(k),omega,r0);
+   [ECEF_reference(k,:),~] = cylindrical_to_ECEF([0 0 0 0 0 0],t_array_real(k),omega,r0);
 end
 
 %% Control Solution
@@ -106,43 +117,98 @@ z_control(t) = polyfit(linspace(0,t_array(end),length(z_spline)), z_spline, leng
 fd_state_traj.ax = zeros(length(t_array),6);
 fd_state_traj.ay = zeros(length(t_array),6);
 fd_state_traj.az = zeros(length(t_array),6);
+fd_state_traj.dt = zeros(length(t_array),6);
+fd_state_traj.axay = zeros(length(t_array),6);
+fd_state_traj.axaz = zeros(length(t_array),6);
+fd_state_traj.ayaz = zeros(length(t_array),6);
+fd_state_traj.dtax = zeros(length(t_array),6);
+fd_state_traj.dtay = zeros(length(t_array),6);
+fd_state_traj.dtaz = zeros(length(t_array),6);
+fd_state_traj.axn = zeros(length(t_array),6);
+fd_state_traj.ayn = zeros(length(t_array),6);
+fd_state_traj.azn = zeros(length(t_array),6);
+
 fd_state_traj.ax(1,:) = y0;
 fd_state_traj.ay(1,:) = y0;
 fd_state_traj.az(1,:) = y0;
+fd_state_traj.dt(1,:) = y0;
+fd_state_traj.dtax(1,:) = y0;
+fd_state_traj.dtay(1,:) = y0;
+fd_state_traj.dtaz(1,:) = y0;
+fd_state_traj.axay(1,:) = y0;
+fd_state_traj.axaz(1,:) = y0;
+fd_state_traj.ayaz(1,:) = y0;
+fd_state_traj.axn(1,:) = y0;
+fd_state_traj.ayn(1,:) = y0;
+fd_state_traj.azn(1,:) = y0;
+
 fd_control_traj.ax = zeros(length(t_array),3);
 fd_control_traj.ay = zeros(length(t_array),3);
 fd_control_traj.az = zeros(length(t_array),3);
-fd_control_step = 1e-15;
+fd_control_traj.axay = zeros(length(t_array),3);
+fd_control_traj.axaz = zeros(length(t_array),3);
+fd_control_traj.ayaz = zeros(length(t_array),3);
+fd_control_traj.axn = zeros(length(t_array),3);
+fd_control_traj.ayn = zeros(length(t_array),3);
+fd_control_traj.azn = zeros(length(t_array),3);
+
+fd_control_step = 1e-7;
+fd_control_step_2 = 1e-7;
+
 
 control_traj = cell(length(t_array),3);
 control_traj(:,:) = {0};
 complex_state_traj = cell(length(t_array),1);
-complex_state_traj{1} = y0';
+complex_state_traj{1} = [multicomplex(y0(1));multicomplex(y0(2));multicomplex(y0(3));multicomplex(y0(4));multicomplex(y0(5));multicomplex(y0(6))];
 real_state_traj = zeros(length(t_array),6);
 real_state_traj(1,:) = y0;
 
-control_perturbation.ax = multicomplex(inputconverter(0,1,1e-10));
-control_perturbation.ay = multicomplex(inputconverter(0,2,1e-10));
-control_perturbation.az = multicomplex(inputconverter(0,3,1e-10));
+control_perturbation.ax = multicomplex(inputconverter(0,1,h));
+control_perturbation.ay = multicomplex(inputconverter(0,2,h));
+control_perturbation.az = multicomplex(inputconverter(0,3,h));
 
 for i = 1:round(length(t_array))
     control_traj{i,1} = -0.00018 + control_perturbation.ax;
     control_traj{i,2} = -0.000002 + control_perturbation.ay;
     control_traj{i,3} = 0.0012 + control_perturbation.az;
+    
     fd_control_traj.ax(i,:) = [-0.00018+fd_control_step,-0.000002,0.0012];
     fd_control_traj.ay(i,:) = [-0.00018,-0.000002+fd_control_step,0.0012];
     fd_control_traj.az(i,:) = [-0.00018,-0.000002,0.0012+fd_control_step];
+    fd_control_traj.dt(i,:) = [-0.00018,-0.000002,0.0012];
+    fd_control_traj.axay(i,:) = [-0.00018+fd_control_step_2,-0.000002+fd_control_step_2,0.0012];
+    fd_control_traj.axaz(i,:) = [-0.00018+fd_control_step_2,-0.000002,0.0012+fd_control_step_2];
+    fd_control_traj.ayaz(i,:) = [-0.00018,-0.000002+fd_control_step_2,0.0012+fd_control_step_2];
+    fd_control_traj.axn(i,:) = [-0.00018-fd_control_step,-0.000002,0.0012];
+    fd_control_traj.ayn(i,:) = [-0.00018,-0.000002-fd_control_step,0.0012];
+    fd_control_traj.azn(i,:) = [-0.00018,-0.000002,0.0012-fd_control_step];
 end
 
 STM = (eye(6) + dt*A + dt^2*A^2/2 + dt^3*A^3/6 + dt^4*A^4/24); % State Transition Matrix
 CTM = (dt*eye(6) + dt^2*A/2 + dt^3*A^2/6 + dt^4*A^3/24); % Control Transition Matrix inv(A)*(STM - eye(6))
+STM_real = real(STM);
+CTM_real = real(CTM);
+dt_fd = real(dt) + fd_control_step;
+STM_fd = (eye(6) + dt_fd*A + dt_fd^2*A^2/2 + dt_fd^3*A^3/6 + dt_fd^4*A^4/24); % State Transition Matrix
+CTM_fd = (dt_fd*eye(6) + dt_fd^2*A/2 + dt_fd^3*A^2/6 + dt_fd^4*A^3/24); % Control Transition Matrix inv(A)*(STM - eye(6))
+
 for k = 2:length(t_array)
     complex_state_traj{k} = STM*complex_state_traj{k-1} + CTM*B*[control_traj{k,:}]';
     real_state_traj(k,:) = real(complex_state_traj{k});
     
-    fd_state_traj.ax(k,:) = STM*fd_state_traj.ax(k-1,:)' + CTM*B*fd_control_traj.ax(k,:)';
-    fd_state_traj.ay(k,:) = STM*fd_state_traj.ay(k-1,:)' + CTM*B*fd_control_traj.ay(k,:)';
-    fd_state_traj.az(k,:) = STM*fd_state_traj.az(k-1,:)' + CTM*B*fd_control_traj.az(k,:)';
+    fd_state_traj.ax(k,:) = STM_real*fd_state_traj.ax(k-1,:)' + CTM_real*B*fd_control_traj.ax(k,:)';
+    fd_state_traj.ay(k,:) = STM_real*fd_state_traj.ay(k-1,:)' + CTM_real*B*fd_control_traj.ay(k,:)';
+    fd_state_traj.az(k,:) = STM_real*fd_state_traj.az(k-1,:)' + CTM_real*B*fd_control_traj.az(k,:)';
+    fd_state_traj.dt(k,:) = STM_fd*fd_state_traj.dt(k-1,:)' + CTM_fd*B*fd_control_traj.dt(k,:)'; %d/d_dt
+    fd_state_traj.dtax(k,:) = STM_fd*fd_state_traj.dtax(k-1,:)' + CTM_fd*B*fd_control_traj.ax(k,:)'; %d^2/d_(dt_ax)
+    fd_state_traj.dtay(k,:) = STM_fd*fd_state_traj.dtay(k-1,:)' + CTM_fd*B*fd_control_traj.ay(k,:)'; %d^2/d_(dt_ay)
+    fd_state_traj.dtaz(k,:) = STM_fd*fd_state_traj.dtaz(k-1,:)' + CTM_fd*B*fd_control_traj.az(k,:)'; %d^2/d_(dt_az)
+    fd_state_traj.axay(k,:) = STM_fd*fd_state_traj.axay(k-1,:)' + CTM_fd*B*fd_control_traj.axay(k,:)'; %d^2/d_(ax_ay)
+    fd_state_traj.axaz(k,:) = STM_fd*fd_state_traj.axaz(k-1,:)' + CTM_fd*B*fd_control_traj.axaz(k,:)'; %d^2/d_(ax%_az)
+    fd_state_traj.ayaz(k,:) = STM_fd*fd_state_traj.ayaz(k-1,:)' + CTM_fd*B*fd_control_traj.ayaz(k,:)'; %d^2/d_(ay_az)
+    fd_state_traj.axn(k,:) = STM_real*fd_state_traj.axn(k-1,:)' + CTM_real*B*fd_control_traj.axn(k,:)';
+    fd_state_traj.ayn(k,:) = STM_real*fd_state_traj.ayn(k-1,:)' + CTM_real*B*fd_control_traj.ayn(k,:)';
+    fd_state_traj.azn(k,:) = STM_real*fd_state_traj.azn(k-1,:)' + CTM_real*B*fd_control_traj.azn(k,:)';
 end
 
 %% Proportional Controler
@@ -188,17 +254,82 @@ for i = 1:size(complex_state_traj{end},1)
     final_state(i) = repr(complex_state_traj{end}(i));
 end
 
-for i = 1:6
-    complex_sensitivity(i,1) = imgn_nth(complex_state_traj{end}(i),1)/imgn_nth(control_perturbation.ax,1);
-    complex_sensitivity(i,2) = imgn_nth(complex_state_traj{end}(i),2)/imgn_nth(control_perturbation.ay,2);
-    complex_sensitivity(i,3) = imgn_nth(complex_state_traj{end}(i),3)/imgn_nth(control_perturbation.az,3);
+complex_sensitivity = zeros(6,7,length(complex_state_traj));
+
+for k = 1:length(complex_state_traj)
+    for i = 1:6
+        complex_sensitivity(i,1,k) = CXn(complex_state_traj{k}(i),1)/CXn(control_perturbation.ax,1);
+        complex_sensitivity(i,2,k) = CXn(complex_state_traj{k}(i),2)/CXn(control_perturbation.ay,2);
+        complex_sensitivity(i,3,k) = CXn(complex_state_traj{k}(i),3)/CXn(control_perturbation.az,3);
+        complex_sensitivity(i,4,k) = CXn(complex_state_traj{k}(i),4)/CXn(dt,4);
+
+        complex_sensitivity(i,5,k) = CXn(complex_state_traj{k}(i),[1 4])/CXn(dt,4)^2; % 'd^2/d_dt_ax'
+        complex_sensitivity(i,6,k) = CXn(complex_state_traj{k}(i),[2 4])/CXn(dt,4)^2; % 'd^2/d_dt_ay'
+        complex_sensitivity(i,7,k) = CXn(complex_state_traj{k}(i),[3 4])/CXn(dt,4)^2; % 'd^2/d_dt_az'
+    end
 end
+
+final_complex_sensitivity = array2table(complex_sensitivity(:,:,end),'VariableNames',{'d/d_ax','d/d_ay','d/d_az','d/d_dt','d^2/d_(dt_ax)','d^2/d_(dt_ay)','d^2/d_(dt_az)'});
+final_complex_sensitivity = [table({'x';'y';'z';'x_dot';'y_dot';'z_dot'},'VariableNames',{' '}), final_complex_sensitivity];
+
 
 fd_sensitivity(:,1) = (fd_state_traj.ax(end,:) - real_state_traj(end,:))'./fd_control_step;
 fd_sensitivity(:,2) = (fd_state_traj.ay(end,:) - real_state_traj(end,:))'./fd_control_step;
 fd_sensitivity(:,3) = (fd_state_traj.az(end,:) - real_state_traj(end,:))'./fd_control_step;
+fd_sensitivity(:,4) = (fd_state_traj.dt(end,:) - real_state_traj(end,:))'./fd_control_step;
+fd_sensitivity(:,5) = (fd_state_traj.dtax(end,:) - fd_state_traj.dt(end,:) - fd_state_traj.ax(end,:) + real_state_traj(end,:))'./fd_control_step^2;
+fd_sensitivity(:,6) = (fd_state_traj.dtay(end,:) - fd_state_traj.dt(end,:) - fd_state_traj.ay(end,:) + real_state_traj(end,:))'./fd_control_step^2;
+fd_sensitivity(:,7) = (fd_state_traj.dtaz(end,:) - fd_state_traj.dt(end,:) - fd_state_traj.az(end,:) + real_state_traj(end,:))'./fd_control_step^2;
+
+fd_sensitivity = array2table(fd_sensitivity,'VariableNames',{'d/d_ax','d/d_ay','d/d_az','d/d_dt','d^2/d_(dt_ax)','d^2/d_(dt_ay)','d^2/d_(dt_az)'});
+fd_sensitivity = [table({'x';'y';'z';'x_dot';'y_dot';'z_dot'},'VariableNames',{' '}), fd_sensitivity];
+
 
 control_cost = sum_control_cost(control_traj,dt);
+traj_duration = dt*num_steps;
+
+
+%% Objective Gradients
+% Complex Method Gradient
+complex_radius = multicomplex(complex_state_traj{end}(1).zn.^2 + complex_state_traj{end}(2).zn.^2 + complex_state_traj{end}(3).zn.^2);
+objective_value = real(complex_radius);
+complex_obj_sensitivity = [CXn(complex_radius,1)/CXn(control_perturbation.ax,1);CXn(complex_radius,2)/CXn(control_perturbation.ay,2);CXn(complex_radius,3)/CXn(control_perturbation.az,3)];
+
+% Complex Method Hessian
+complex_hessian = zeros(3);
+complex_hessian(1,2) = CXn(complex_radius,[1 2])/CXn(control_perturbation.ax,1)^2;
+complex_hessian(1,3) = CXn(complex_radius,[1 3])/CXn(control_perturbation.ay,2)^2;
+complex_hessian(2,3) = CXn(complex_radius,[2 3])/CXn(control_perturbation.az,3)^2;
+
+% Finite Difference Gradient
+real_radius = real_state_traj(end,1)^2 + real_state_traj(end,2)^2 + real_state_traj(end,3)^2;
+fd_radius.ax = fd_state_traj.ax(end,1)^2 + fd_state_traj.ax(end,2)^2 + fd_state_traj.ax(end,3)^2;
+fd_radius.ay = fd_state_traj.ay(end,1)^2 + fd_state_traj.ay(end,2)^2 + fd_state_traj.ay(end,3)^2;
+fd_radius.az = fd_state_traj.az(end,1)^2 + fd_state_traj.az(end,2)^2 + fd_state_traj.az(end,3)^2;
+
+fd_obj_sensitivity = [(fd_radius.ax - real_radius)/fd_control_step ; (fd_radius.ay - real_radius)/fd_control_step; (fd_radius.az - real_radius)/fd_control_step];
+
+% Finite Difference Hessian
+fd_radius.axay = fd_state_traj.axay(end,1)^2 + fd_state_traj.axay(end,2)^2 + fd_state_traj.axay(end,3)^2;
+fd_radius.axaz = fd_state_traj.axaz(end,1)^2 + fd_state_traj.axaz(end,2)^2 + fd_state_traj.axaz(end,3)^2;
+fd_radius.ayaz = fd_state_traj.ayaz(end,1)^2 + fd_state_traj.ayaz(end,2)^2 + fd_state_traj.ayaz(end,3)^2;
+fd_radius.axn = fd_state_traj.axn(end,1)^2 + fd_state_traj.axn(end,2)^2 + fd_state_traj.axn(end,3)^2;
+fd_radius.ayn = fd_state_traj.ayn(end,1)^2 + fd_state_traj.ayn(end,2)^2 + fd_state_traj.ayn(end,3)^2;
+fd_radius.azn = fd_state_traj.azn(end,1)^2 + fd_state_traj.azn(end,2)^2 + fd_state_traj.azn(end,3)^2;
+
+fd_obj_hessian = zeros(3);
+
+fd_obj_hessian(1,1) = (fd_radius.ax - 2*real_radius + fd_radius.axn)/fd_control_step_2^2;
+fd_obj_hessian(2,2) = (fd_radius.ay - 2*real_radius + fd_radius.ayn)/fd_control_step_2^2;
+fd_obj_hessian(3,3) = (fd_radius.az - 2*real_radius + fd_radius.azn)/fd_control_step_2^2;
+
+fd_obj_hessian(1,2) = (fd_radius.axay - fd_radius.ax - fd_radius.ay + real_radius)/fd_control_step_2^2;
+fd_obj_hessian(2,1) = fd_obj_hessian(1,2);
+fd_obj_hessian(1,3) = (fd_radius.axaz - fd_radius.ax - fd_radius.az + real_radius)/fd_control_step_2^2;
+fd_obj_hessian(3,1) = fd_obj_hessian(1,3);
+fd_obj_hessian(2,3) = (fd_radius.ayaz - fd_radius.ay - fd_radius.az + real_radius)/fd_control_step_2^2;
+fd_obj_hessian(3,2) = fd_obj_hessian(2,3);
+
 
 
 %% Plotting Inanimate Curves
@@ -252,6 +383,19 @@ legend('CW x coordinate', 'kepler x coordinate')
 xlabel('time (s)')
 ylabel('position m')
 %}
+
+figure(2)
+hold on
+title('XY Sensitivity Quiver Plot')
+plot(real_state_traj(:,2),real_state_traj(:,1),'b');
+quiver_vectors = [real_state_traj(:,2),real_state_traj(:,1),reshape(complex_sensitivity(2,1,:),[],1),reshape(complex_sensitivity(1,1,:),[],1)];
+quiver_vectors = quiver_vectors(1:10:size(quiver_vectors,1),:);
+quiver(quiver_vectors(:,1),quiver_vectors(:,2),quiver_vectors(:,3),quiver_vectors(:,4)*10,0.1);
+ylabel('$x_{rel}$ (m)','Interpreter','latex')
+xlabel('$y_{rel}$ (m)','Interpreter','latex')
+set(gca, 'xdir', 'reverse')
+figure(1)
+
 
 %% Plot z state space transition plot
 Z_matrix = [0       1;
@@ -464,6 +608,7 @@ end
 
 t_array = t_array';
 
+
 %% Functions
 %{
 function dydt = odefun(t,y,omega)
@@ -477,6 +622,136 @@ function dydt = odefun(t,y,omega)
 end
 %}
 
+%initial_control_parameters = [-0.00018, -0.000002, 0.0012];
+
+function [control_parameters,fval] = OptimiseTrajectory(initial_control_parameters,t0_state, ref_altitude, intial_time_step, num_steps, h)
+    options = optimoptions('fmincon','SpecifyObjectiveGradient',false,'Display','iter'); % 'OutputFcn'?
+    [control_parameters,fval] = fmincon(@(control_parameters)cal_trajectory(control_parameters, t0_state, ref_altitude, intial_time_step, num_steps, h),initial_control_parameters,[],[],[],[],[-.001;-.001;-.01],[.001;.001;.01],[],options);
+end
+
+function BacktrackLineMethod(initial_control_parameters,t0_state, ref_altitude, intial_time_step, num_steps, h)
+    uiFig = uifigure('Position',[100 100 1125 475]);
+    uT = uitable(uiFig);
+    uT.ColumnName ={'iter', 'fun calls', 'step size t', 'objective val','x_f', 'y_f', 'z_f', 'ax', 'ay', 'az',};
+    uT.Units='Normalized';
+    uT.Position = [.1 .1 .8 .8];
+    drawnow
+    
+    control_parameters = initial_control_parameters;
+    beta = 0.3;
+    alpha = 0.5;
+    [objective, gradient,final_state] = calc_obj_grad(control_parameters);
+    uT.Data(1,:) = [0 1 0 objective final_state(1:3) control_parameters(1:3)];
+    drawnow
+    for i = 1:10
+        t = 1e-14;
+        f_calls = 1;
+                
+        % backtracking line search
+        while true
+        [offset_objective, offset_gradient, final_state] = calc_obj_grad(control_parameters-t*gradient);
+            if offset_objective > objective - sum(gradient.^2)*t*alpha
+                t = t*beta;
+                f_calls = f_calls + 1;
+            else
+                break
+            end
+        end
+           
+        objective = offset_objective;
+        control_parameters = control_parameters - t*gradient; %2e-16
+        gradient = offset_gradient;
+        uT.Data(1+i,:) = [i f_calls t objective final_state(1:3) control_parameters(1:3)];
+        drawnow
+    end
+    
+    function [obj, grad, state] = calc_obj_grad(control_parameters)
+        [obj, grad, state] = cal_trajectory(control_parameters, t0_state, ref_altitude, intial_time_step, num_steps, h);
+    end
+
+end
+
+function [objective_value, fun_gradient, final_state] = cal_trajectory(control_parameters, t0_state, ref_altitude, time_step, num_steps, h)
+    dt = multicomplex(inputconverter(time_step,4,h));
+    
+    mu = 3.986004418e14;
+    r0 = 6371e3 + ref_altitude;
+    omega = sqrt(mu/r0^3);
+    P = (2*pi*1/omega);
+    for k = 1:num_steps
+        t_array(k) = k*dt;
+    end
+    
+    A = [0 0 0 1 0 0;
+         0 0 0 0 1 0;
+         0 0 0 0 0 1;
+         3*omega^2 0 0 0 2*omega  0;
+         0 0 0 -2*omega 0 0;
+         0 0 -omega^2 0 0 0];
+    B = [0 0 0;
+         0 0 0;
+         0 0 0;
+         1 0 0;
+         0 1 0;
+         0 0 1];
+     
+    control_traj = cell(length(t_array),3);
+    control_traj(:,:) = {0};
+    complex_state_traj = cell(length(t_array),1);
+    complex_state_traj{1} = [multicomplex(t0_state(1));multicomplex(t0_state(2));multicomplex(t0_state(3));multicomplex(t0_state(4));multicomplex(t0_state(5));multicomplex(t0_state(6))];
+    real_state_traj = zeros(length(t_array),6);
+    real_state_traj(1,:) = t0_state;
+    control_perturbation.ax = multicomplex(inputconverter(0,1,h));
+    control_perturbation.ay = multicomplex(inputconverter(0,2,h));
+    control_perturbation.az = multicomplex(inputconverter(0,3,h));
+    
+    for i = 1:round(length(t_array))
+        control_traj{i,1} = control_parameters(1) + control_perturbation.ax;
+        control_traj{i,2} = control_parameters(2) + control_perturbation.ay;
+        control_traj{i,3} = control_parameters(3) + control_perturbation.az;
+    end
+    
+    STM = (eye(6) + dt*A + dt^2*A^2/2 + dt^3*A^3/6 + dt^4*A^4/24); % State Transition Matrix
+    CTM = (dt*eye(6) + dt^2*A/2 + dt^3*A^2/6 + dt^4*A^3/24); % Control Transition Matrix inv(A)*(STM - eye(6))
+    STM_real = real(STM);
+    CTM_real = real(CTM);
+    
+    
+    for k = 2:length(t_array)
+        complex_state_traj{k} = STM*complex_state_traj{k-1} + CTM*B*[control_traj{k,:}]';
+        real_state_traj(k,:) = real(complex_state_traj{k});
+    end
+    
+    %final_pos_sum = multicomplex(abs(complex_state_traj{end}(1).zn) + abs(complex_state_traj{end}(2).zn) + abs(complex_state_traj{end}(3).zn));
+    %objective_value = real(final_pos_sum);
+    %final_pos_sum = complex_state_traj{end}(1) + complex_state_traj{end}(2) + complex_state_traj{end}(3);
+    %objective_value = abs(real(complex_state_traj{end}(1))) + abs(real(complex_state_traj{end}(2))) + abs(real(complex_state_traj{end}(3)));
+    complex_radius = complex_state_traj{end}(1)^2 + complex_state_traj{end}(2)^2 + complex_state_traj{end}(3)^2;
+    objective_value = real(complex_radius);
+    fun_gradient = [CXn(complex_radius,1)/CXn(control_perturbation.ax,1),CXn(complex_radius,2)/CXn(control_perturbation.ay,2),CXn(complex_radius,3)/CXn(control_perturbation.az,3)];
+
+    %disp(control_parameters)
+    final_state = real_state_traj(end,:);
+    %disp(final_state)
+end
+
+function output = CW_trajectory(t0_state, ref_altitude, time_step, num_steps)
+    dt = time_step;
+    
+    mu = 3.986004418e14;
+    r0 = 6371e3 + ref_altitude;
+    omega = sqrt(mu/r0^3);
+    P = (2*pi*1/omega);
+    for k = 1:num_steps
+        t_array(k) = k*dt;
+    end
+    
+    CW_sol = zeros(length(t_array),6);
+    for k=1:length(t_array)
+        CW_sol(k,:) = CW_solution(omega, t_array(k), t0_state);
+    end
+end
+
 function output = CW_solution(omega,t, X0)
     x0 = X0(1);
     y0 = X0(2);
@@ -484,6 +759,7 @@ function output = CW_solution(omega,t, X0)
     xdot0 = X0(4);
     ydot0 = X0(5);
     zdot0 = X0(6);
+      
        
     xy_mat = [4-3*cos(omega*t), 0, sin(omega*t)/omega, 2*(1-cos(omega*t))/omega;
         6*(sin(omega*t)-omega*t),1, 2*(cos(omega*t)-1)/omega, (4*sin(omega*t)-3*omega*t)/omega;

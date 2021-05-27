@@ -185,6 +185,7 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
             % overloading allows for the elementswise addition and
             % substraction of same sized arrays of multicomplex numbers.
             if size(obj1)==size(obj2)
+                outfor(1:size(obj1,1),1:size(obj1,2)) = multicomplex(0);
                 for i = 1:size(obj1,1)
                     for j = 1:size(obj1,2)
                         [obj11,obj21] = consimulti(obj1(i,j),obj2(i,j));
@@ -192,6 +193,7 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
                     end
                 end
             elseif size(obj1)==[1,1]
+                outfor(1:size(obj2,1),1:size(obj2,2)) = multicomplex(0);
                 for i = 1:size(obj2,1)
                     for j = 1:size(obj2,2)
                         [obj11,obj21] = consimulti(obj1,obj2(i,j));
@@ -199,6 +201,7 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
                     end
                 end
             elseif size(obj2)==[1,1]
+                outfor(1:size(obj1,1),1:size(obj1,2)) = multicomplex(0);
                 for i = 1:size(obj1,1)
                     for j = 1:size(obj1,2)
                         [obj11,obj21] = consimulti(obj1(i,j),obj2);
@@ -300,78 +303,62 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
             % in matrix multiplication
             if and(size(self)==[1 1],size(other)==[1 1])
                 [self,other] = consimulti(self,other);
-                outfor=multicomplex(arrayM(matrep(self)*matrep(other)));           
+                out=multicomplex(arrayM(matrep(self)*matrep(other)));           
             
-            %{
-            elseif or(size(self)==[1 1],size(other)==[1 1])
-                if size(self)==[1 1]
-                    constant = self;
-                    matrix = other;
-                else
-                    constant = other;
-                    matrix = self;
-                end
-                out = cell(size(matrix));
-                for i = 1:size(matrix,1)
-                    for j = 1:size(matrix,2)
-                        out{i,j} = constant*matrix(i,j);
-                    end
-                end
-                out = [out{:,:}];
-            %}
             elseif isequal(size(self),[1 1]) % treat self = constant, other = matrix
-                %out = cell(size(other));
                 for i = 1:size(other,1)
                     for j = 1:size(other,2)
-                        outfor(i,j) = self*other(i,j);
+                        other(i,j) = self*other(i,j);
                     end
                 end
-                %out = [out{:,:}];
+                out = other;
               
             elseif isequal(size(other),[1 1]) % treat self = matrix, other = constant
-                %out = cell(size(self));
+                out(1:size(self,1),1:size(self,2)) = multicomplex(0);
                 for i = 1:size(self,1)
                     for j = 1:size(self,2)
-                        outfor(i,j) = other*self(i,j);
+                        out(i,j) = other*self(i,j);
                     end
                 end
-                %out = [out{:,:}];
+                %outfor = [outfor{:,:}];
             
             elseif size(self,2) == size(other,1) % self = matrix, other = matrix, with suitable dimensions to perform matrix multiplication
-                %out = cell(size(self,1),size(other,2));
+                out(1:size(self,1),1:size(other,2)) = multicomplex(0);
                 for i = 1:size(self,1)
                     for j = 1:size(other,2)
                         sum = 0;
                         for k = 1:size(self,2)
                            sum = sum + self(i,k)*other(k,j); 
                         end
-                        outfor(i,j) = sum;
+                        out(i,j) = sum;
                     end
                 end
                 %out = [out{:,:}];
             else
                 error('Error using  *, Incorrect dimensions for matrix multiplication. Check that the number of columns in the first matrix matches the number of rows in the second matrix. To perform elementwise multiplication, use ''.*''.');
             end
-            out = outfor;
         end
         
         function out = mrdivide(self,other)                       % Division
             
             % Division was found to be most efficient wit the built
             % in matrix division
-            
-            [self,other] = consimulti(self,other);
-            
-            % The following check for zero divisors is only turned on if
-            % specified by the user
-            if other.check_Z0 == 'T'
-                if det(matrep(other)) == 0
-                    error('Attempting to divide by a zero divizor multicomplex number')
+            out(1:size(self,1),1:size(self,2)) = multicomplex(0);
+            for i = 1:size(self,1)
+                for j = 1:size(self,2)
+                [self(i,j),other] = consimulti(self(i,j),other);
+
+                % The following check for zero divisors is only turned on if
+                % specified by the user
+                if other.check_Z0 == 'T'
+                    if det(matrep(other)) == 0
+                        error('Attempting to divide by a zero divizor multicomplex number')
+                    end
+                end
+
+                out(i,j)=multicomplex(arrayM(matrep(self(i,j))/matrep(other)));
                 end
             end
-            
-            out=multicomplex(arrayM(matrep(self)/matrep(other)));
-            
         end
         
         function out = mpower(input,p)                             % Power
@@ -828,6 +815,18 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
             out=C.zn(2^(n-1)+1);
         end
         
+        function out = CXn(C,imgn_parts)
+            if or(isnumeric(C) , max(imgn_parts) > log2(length(C.zn)))
+                out = 0;
+            else
+                index = 1;
+                for n = imgn_parts
+                    index = index + 2^(n-1);
+                end
+                out = C.zn(index);
+            end
+        end
+        
         function out = CX2(C,im,in)
             
             % This function extracts the coefficient of the user inputed imaginary part inim. C is the multicomplex number
@@ -978,7 +977,7 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
             % Second type of modulus: square root of all the coefficients of the
             % multicomplex object squared.
             
-            out=(sum((input.zn(1:end)).^(2))^(1/2));
+            out=(index((input.zn(1:end)).^(2))^(1/2));
             
             
         end
