@@ -303,40 +303,42 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
             % in matrix multiplication
             if and(size(self)==[1 1],size(other)==[1 1])
                 [self,other] = consimulti(self,other);
-                out=multicomplex(arrayM(matrep(self)*matrep(other)));           
+                outfor=multicomplex(arrayM(matrep(self)*matrep(other)));           
             
             elseif isequal(size(self),[1 1]) % treat self = constant, other = matrix
+                outfor(1:size(other,1),1:size(other,2)) = multicomplex(0);
                 for i = 1:size(other,1)
                     for j = 1:size(other,2)
-                        other(i,j) = self*other(i,j);
+                        outfor(i,j) = self*other(i,j);
                     end
                 end
-                out = other;
+                %outfor = [outfor{:,:}];
               
             elseif isequal(size(other),[1 1]) % treat self = matrix, other = constant
-                out(1:size(self,1),1:size(self,2)) = multicomplex(0);
+                outfor(1:size(self,1),1:size(self,2)) = multicomplex(0);
                 for i = 1:size(self,1)
                     for j = 1:size(self,2)
-                        out(i,j) = other*self(i,j);
+                        outfor(i,j) = other*self(i,j);
                     end
                 end
                 %outfor = [outfor{:,:}];
             
             elseif size(self,2) == size(other,1) % self = matrix, other = matrix, with suitable dimensions to perform matrix multiplication
-                out(1:size(self,1),1:size(other,2)) = multicomplex(0);
+                outfor(1:size(self,1),1:size(other,2)) = multicomplex(0);
                 for i = 1:size(self,1)
                     for j = 1:size(other,2)
                         sum = 0;
                         for k = 1:size(self,2)
                            sum = sum + self(i,k)*other(k,j); 
                         end
-                        out(i,j) = sum;
+                        outfor(i,j) = sum;
                     end
                 end
                 %out = [out{:,:}];
             else
                 error('Error using  *, Incorrect dimensions for matrix multiplication. Check that the number of columns in the first matrix matches the number of rows in the second matrix. To perform elementwise multiplication, use ''.*''.');
             end
+            out = outfor;
         end
         
         function out = mrdivide(self,other)                       % Division

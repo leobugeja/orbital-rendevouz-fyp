@@ -1,16 +1,17 @@
 clear
 clc
-close all force
+%close all force
 addpath('multicomplex')
 
 %[objective_value, fun_gradient, hessian, final_state] = complex_trajectory(@nonlin_eqn,[-0.00018, -0.000002, 0.0012], [40 -400 500 0 0 1], 408e3, 5, 1000, 1e-15, false)
 %[objective_value, fun_gradient, hessian, final_state] = fd_trajectory(@nonlin_eqn,[-0.00018, -0.000002, 0.0012], [40 -400 500 0 0 1], 408e3, 5, 1000, 1e-7)
 
-%[control_parameters,final_radius] = OptimiseTrajectory(@complex_trajectory, @nonlin_eqn, [-9.9997e-4, -6.4424e-4, 0.0078], 10*[40 -40 100 1 0.1 1],  408e3, 5, 1000, 1e-15, true) %last is if use hessian
-[objective_val, control_parameters, final_state] = BacktrackLineMethod(@complex_trajectory,@lin_eq,  [-9.9997e-4, -6.4424e-4, 0.0078], 10*[40 -40 100 1 0.1 1],  408e3, 5, 1000, 1e-20, true)
+%[control_parameters,final_radius] = OptimiseTrajectory(@complex_trajectory, @nonlin_eqn,'radius_objective', [-9.9997e-4, -6.4424e-4, 0.0078], 10*[40 -40 100 1 0.1 1],  408e3, 5, 1000, 1e-15, true) %last is if use hessian
+[objective_val, control_parameters, final_state] = BacktrackLineMethod(@complex_trajectory,@nonlin_eqn,'radius_time_objective',  [-9.9997e-4, -6.4424e-4, 0.0078], 10*[40 -40 100 1 0.1 1],  408e3, 5, 1000, 1e-20, true)
 
-%[control_parameters,final_radius] = OptimiseTrajectory(@fd_trajectory, @nonlin_eqn,  [-9.9997e-4, -6.4424e-4, 0.0078], 10*[40 -40 100 1 0.1 1],  408e3, 5, 1000, 1e-7, false)
-%[objective_val, control_parameters, final_state] = BacktrackLineMethod(@fd_trajectory, @nonlin_eqn,  [-9.9997e-4, -6.4424e-4, 0.0078], 10*[40 -40 100 1 0.1 1],  408e3, 5, 1000, 1e-7, true)
+%[control_parameters,final_radius] = OptimiseTrajectory(@fd_trajectory, @nonlin_eqn,'radius_objective',  [-9.9997e-4, -6.4424e-4, 0.0078], 10*[40 -40 100 1 0.1 1],  408e3, 5, 1000, 1e-7, false)
+%[objective_val, control_parameters, final_state] = BacktrackLineMethod(@fd_trajectory, @nonlin_eqn,'radius_objective',  [-9.9997e-4, -6.4424e-4, 0.0078], 10*[40 -40 100 1 0.1 1],  408e3, 5, 1000, 1e-7, true)
+%[objective_val, control_parameters, final_state] = BacktrackLineMethod(@fd_trajectory, @nonlin_eqn,'radius_time_objective',  [-9.9997e-4, -6.4424e-4, 0.0078], 10*[40 -40 100 1 0.1 1],  408e3, 5, 1000, 1e-7, true)
 
 function [control_parameters,fval,exitflag,output,lambda,grad,hessian]= OptimiseTrajectory(sensitivity_method, dynamics_fun, initial_control_parameters,t0_state, ref_altitude, intial_time_step, num_steps, h,use_hessian)
     if use_hessian
@@ -21,9 +22,13 @@ function [control_parameters,fval,exitflag,output,lambda,grad,hessian]= Optimise
     [control_parameters,fval,exitflag,output,lambda,grad,hessian] = fmincon(@(control_parameters)sensitivity_method(dynamics_fun,control_parameters, t0_state, ref_altitude, intial_time_step, num_steps, h, use_hessian),initial_control_parameters,[],[],[],[],[-.001;-.001;-.01],[.001;.001;.01],[],options);
 end
 
-function [objective_value, fun_gradient, hessian, final_state] = complex_trajectory(dynamics_fun, control_parameters, t0_state, ref_altitude, time_step, num_steps, h, use_hessian)
-    dt = time_step; %multicomplex(inputconverter(time_step,4,h));
-    
+function [objective_value, fun_gradient, hessian, final_state] = complex_trajectory(dynamics_fun, objective_function, control_parameters, t0_state, ref_altitude, time_step, num_steps, h, use_hessian)
+    if objective_function == "radius_time_objective"
+        dt = multicomplex(inputconverter(time_step,[7 8],h));
+    else
+        dt = time_step;
+    end
+
     mu = 3.986004418e14;
     r0 = 6371e3 + ref_altitude;
     omega = sqrt(mu/r0^3);
@@ -58,23 +63,11 @@ function [objective_value, fun_gradient, hessian, final_state] = complex_traject
     start_RK = tic;
     % Numerical Propagation
     for k = 2:length(t_array)
-        clc
-        tic
-        k1 = dynamics_fun(complex_state_traj{k-1},[control_traj{k,:}],r0,mu,omega); % nonlin:0.013 seconds  lin:0.002
-        toc
-        tic
-        k2 = dynamics_fun(complex_state_traj{k-1}+dt*k1/2,[control_traj{k,:}],r0,mu,omega); % nonlin:0.014seconds lin:0.006
-        toc
-        tic
-        k3 = dynamics_fun(complex_state_traj{k-1}+dt*k2/2,[control_traj{k,:}],r0,mu,omega); % nonlin:0.014 seconds lin:0.006
-        toc
-        tic
-        k4 = dynamics_fun(complex_state_traj{k-1}+dt*k3,[control_traj{k,:}],r0,mu,omega); % nonlin:0.013 seconds lin:0.0035 
-        toc
-        tic
-        complex_state_traj{k} = complex_state_traj{k-1};% + dt*(k1 + 2*k2 + 2*k3 + k4)/6; % nonlin:0.008 seconds lin: 0.0084
-        toc
-
+        k1 = dynamics_fun(complex_state_traj{k-1},[control_traj{k,:}],r0,mu,omega); % nonlin:0.013 seconds  lin:
+        k2 = dynamics_fun(complex_state_traj{k-1}+dt*k1/2,[control_traj{k,:}],r0,mu,omega); % nonlin:0.014seconds lin:
+        k3 = dynamics_fun(complex_state_traj{k-1}+dt*k2/2,[control_traj{k,:}],r0,mu,omega); % nonlin:0.014 seconds lin:
+        k4 = dynamics_fun(complex_state_traj{k-1}+dt*k3,[control_traj{k,:}],r0,mu,omega); % nonlin:0.013 seconds lin:
+        complex_state_traj{k} = complex_state_traj{k-1} + dt*(k1 + 2*k2 + 2*k3 + k4)/6; % nonlin:0.008 seconds lin:
         real_state_traj(k,:) = real(complex_state_traj{k}); % 0.0001 seconds
     end
     %end_RK = toc(start_RK)
@@ -82,10 +75,18 @@ function [objective_value, fun_gradient, hessian, final_state] = complex_traject
     
     complex_radius = complex_state_traj{end}(1)^2 + complex_state_traj{end}(2)^2 + complex_state_traj{end}(3)^2;
     fun_gradient = [CXn(complex_radius,1)/CXn(control_perturbation.ax,1),CXn(complex_radius,2)/CXn(control_perturbation.ay,2),CXn(complex_radius,3)/CXn(control_perturbation.az,3)];
+    if objective_function == "radius_time_objective"
+        fun_gradient(end+1) = CXn(complex_radius,7)/h;
+    end
+    
     final_state = real_state_traj(end,:);
     
     if use_hessian
-        hessian = complex_hessian(complex_radius,3,h);
+        if objective_function == "radius_time_objective"
+            hessian = complex_hessian(complex_radius,4,h);
+        else
+            hessian = complex_hessian(complex_radius,3,h);
+        end
     else
         hessian = eye(3);
     end
@@ -96,20 +97,21 @@ function [objective_value, fun_gradient, hessian, final_state] = complex_traject
     %}   
 end
 
-function [objective_value, fun_gradient, hessian, final_state] = fd_trajectory(dynamics_fun, control_parameters, t0_state, ref_altitude, time_step, num_steps, fd_control_step, use_hessian)
-    dt = time_step;
-    
+function [objective_value, fun_gradient, hessian, final_state] = fd_trajectory(dynamics_fun, objective_function, independent_variables, t0_state, ref_altitude, time_step, num_steps, fd_control_step, use_hessian)
+    control_parameters = independent_variables(1:3);
+   
     mu = 3.986004418e14;
     r0 = 6371e3 + ref_altitude;
     omega = sqrt(mu/r0^3);
     P = (2*pi/omega);
     for k = 1:num_steps
-        t_array(k) = k*dt;
+        t_array(k) = k*time_step;
     end
     
-    fd_strings = string({'none','ax','ay','az','axn','ayn','azn','axay','axaz','ayaz','dt','dtax','dtay','dtaz'});
-    %fd_state_traj = struct;
-    %fd_control_traj = struct;
+    fd_strings = string({'none','ax','ay','az','axn','ayn','azn','axay','axaz','ayaz','dt','dtax','dtay','dtaz','dtn'});
+    dt = time_step*ones(1,15);
+    dt = dt + [0 0 0 0 0 0 0 0 0 0 fd_control_step fd_control_step fd_control_step fd_control_step -fd_control_step];
+    
     for i = 1:size(fd_strings,2)
        fd_state_traj.(fd_strings(i)) = zeros(length(t_array),6);
        fd_state_traj.(fd_strings(i))(1,:) = t0_state;
@@ -128,21 +130,24 @@ function [objective_value, fun_gradient, hessian, final_state] = fd_trajectory(d
         fd_control_traj.azn(k,:) = control_parameters - [0, 0, fd_control_step];
         fd_control_traj.axay(k,:) = control_parameters + [fd_control_step, fd_control_step, 0];
         fd_control_traj.axaz(k,:) = control_parameters + [fd_control_step, 0, fd_control_step];
-        fd_control_traj.ayaz(k,:) = control_parameters + [0, fd_control_step, fd_control_step];   
+        fd_control_traj.ayaz(k,:) = control_parameters + [0, fd_control_step, fd_control_step];
+        
+        fd_control_traj.dt(k,:) = fd_control_traj.none(k,:);
+        fd_control_traj.dtn(k,:) = fd_control_traj.none(k,:);
         fd_control_traj.dtax(k,:) = fd_control_traj.ax(k,:);
         fd_control_traj.dtay(k,:) = fd_control_traj.ay(k,:);
         fd_control_traj.dtaz(k,:) = fd_control_traj.az(k,:);
-        fd_control_traj.dt(k,:) = fd_control_traj.none(k,:);
+
     end
     
     % Numerical Propagation
     for k = 2:length(t_array)
         for i = 1:size(fd_strings,2)
             k1 = dynamics_fun(fd_state_traj.(fd_strings(i))(k-1,:),        [fd_control_traj.(fd_strings(i))(k-1,:)],r0,mu,omega)';
-            k2 = dynamics_fun(fd_state_traj.(fd_strings(i))(k-1,:)+dt*k1/2,[fd_control_traj.(fd_strings(i))(k-1,:)],r0,mu,omega)';
-            k3 = dynamics_fun(fd_state_traj.(fd_strings(i))(k-1,:)+dt*k2/2,[fd_control_traj.(fd_strings(i))(k-1,:)],r0,mu,omega)';
-            k4 = dynamics_fun(fd_state_traj.(fd_strings(i))(k-1,:)+dt*k3,  [fd_control_traj.(fd_strings(i))(k-1,:)],r0,mu,omega)';
-            fd_state_traj.(fd_strings(i))(k,:) = fd_state_traj.(fd_strings(i))(k-1,:) + dt*(k1 + 2*k2 + 2*k3 + k4)/6;
+            k2 = dynamics_fun(fd_state_traj.(fd_strings(i))(k-1,:)+dt(i)*k1/2,[fd_control_traj.(fd_strings(i))(k-1,:)],r0,mu,omega)';
+            k3 = dynamics_fun(fd_state_traj.(fd_strings(i))(k-1,:)+dt(i)*k2/2,[fd_control_traj.(fd_strings(i))(k-1,:)],r0,mu,omega)';
+            k4 = dynamics_fun(fd_state_traj.(fd_strings(i))(k-1,:)+dt(i)*k3,  [fd_control_traj.(fd_strings(i))(k-1,:)],r0,mu,omega)';
+            fd_state_traj.(fd_strings(i))(k,:) = fd_state_traj.(fd_strings(i))(k-1,:) + dt(i)*(k1 + 2*k2 + 2*k3 + k4)/6;
         end
     end
     
@@ -150,7 +155,6 @@ function [objective_value, fun_gradient, hessian, final_state] = fd_trajectory(d
     for i = 1:size(fd_strings,2)
        fd_radius.(fd_strings(i)) = fd_state_traj.(fd_strings(i))(end,1)^2 + fd_state_traj.(fd_strings(i))(end,2)^2 + fd_state_traj.(fd_strings(i))(end,3)^2;
     end
-    
     %fun_gradient = [(fd_radius.ax - fd_radius.none)/fd_control_step , (fd_radius.ay - fd_radius.none)/fd_control_step, (fd_radius.az - fd_radius.none)/fd_control_step];
     fun_gradient = [(fd_radius.ax - fd_radius.axn)/(2*fd_control_step) , (fd_radius.ay - fd_radius.ayn)/(2*fd_control_step), (fd_radius.az - fd_radius.none)/(2*fd_control_step)];
     if use_hessian
@@ -168,10 +172,20 @@ function [objective_value, fun_gradient, hessian, final_state] = fd_trajectory(d
     else
         hessian = eye(3);
     end
-    
+    if objective_function == "radius_time_objective"
+        fun_gradient(end+1) = (fd_radius.dt - fd_radius.dtn)/(2*fd_control_step);
+        hessian(1,4) = (fd_radius.dtax - fd_radius.ax - fd_radius.dt + fd_radius.none)/fd_control_step^2;
+        hessian(4,1) = hessian(1,4);
+        hessian(2,4) = (fd_radius.dtay - fd_radius.ay - fd_radius.dt + fd_radius.none)/fd_control_step^2;
+        hessian(4,2) = hessian(2,4);
+        hessian(3,4) = (fd_radius.dtaz - fd_radius.az - fd_radius.dt + fd_radius.none)/fd_control_step^2;
+        hessian(4,3) = hessian(3,4);
+        hessian(4,4) = (fd_radius.dt - 2*fd_radius.none + fd_radius.dtn)/fd_control_step^2;
+    end
     objective_value = fd_radius.none;
-    final_state = fd_state_traj.none(end,:);  
+    final_state = fd_state_traj.none(end,:);
 end
+
 
 function output = nonlin_eqn(x,control_accel,R,mu,omega)
     output = [x(4);
@@ -205,13 +219,22 @@ function hessian = complex_hessian(obj_fun,hessian_size, h)
     hessian(3,1) = hessian(1,3);
     hessian(2,3) = CXn(obj_fun,[2 3])/h^2;
     hessian(3,2) = hessian(2,3);
+    if hessian_size == 4
+        hessian(1,4) = CXn(obj_fun,[1 7])/h^2;
+        hessian(4,1) = hessian(1,4);
+        hessian(2,4) = CXn(obj_fun,[2 7])/h^2;
+        hessian(4,2) = hessian(2,4);
+        hessian(3,4) = CXn(obj_fun,[3 7])/h^2;
+        hessian(4,3) = hessian(3,4);
+        hessian(4,4) = CXn(obj_fun,[7 8])/h^2;
+    end
 end
 
-function [objective, control_parameters, final_state] = BacktrackLineMethod(sensitivity_method, dynamics_fun, control_parameters, t0_state, ref_altitude, initial_time_step, num_steps, h, use_hessian)
+function [objective, independent_variables, final_state] = BacktrackLineMethod(sensitivity_method, dynamics_fun,objective_function, control_parameters, t0_state, ref_altitude, dt, num_steps, h, use_hessian)
     start_totaltime = tic;
     uiFig = uifigure('Position',[100 100 1125 475]);
     uT = uitable(uiFig);
-    uT.ColumnName ={'iter', 'fun calls', 'step size t', 'objective val','x_f', 'y_f', 'z_f', 'ax', 'ay', 'az',};
+    uT.ColumnName ={'iter', 'fun calls', 'line step', 'objective val','x_f', 'y_f', 'z_f', 'dt','ax', 'ay', 'az',};
     uT.Units='Normalized';
     uT.Position = [.1 .1 .8 .8];
     drawnow
@@ -221,15 +244,21 @@ function [objective, control_parameters, final_state] = BacktrackLineMethod(sens
     else
         default_t = 1e-13;
     end
-    
+
+    if objective_function == "radius_objective"
+        independent_variables = control_parameters;
+    elseif objective_function == "radius_time_objective"
+        independent_variables = [control_parameters dt];
+    end
+
     limit = 1e-10;
     beta = 0.3;
     alpha = 0.1;
     start_iteration = tic;
-    [objective, gradient, hessian, final_state] = calc_obj_grad(control_parameters);
-    %end_iteration = toc(start_iteration)
+    [objective, gradient, hessian, final_state] = calc_obj_grad(independent_variables);
+    end_iteration = toc(start_iteration)
     
-    uT.Data(1,:) = [0 1 0 objective final_state(1:3) control_parameters(1:3)];
+    uT.Data(1,:) = [0 1 0 objective final_state(1:3) dt independent_variables(1:3)];
     drawnow
     for i = 1:15
         t = default_t;
@@ -237,8 +266,8 @@ function [objective, control_parameters, final_state] = BacktrackLineMethod(sens
         % backtracking line search
         while true
             start_iteration = tic;
-            [offset_objective, offset_gradient, offset_hessian, final_state] = calc_obj_grad(control_parameters-t*gradient/hessian);
-            %end_iteration = toc(start_iteration)
+            [offset_objective, offset_gradient, offset_hessian, final_state] = calc_obj_grad(independent_variables-t*gradient/hessian);
+            end_iteration = toc(start_iteration)
             if offset_objective > objective - alpha*t*gradient/hessian*gradient' && f_calls < 10 && offset_objective > limit
                 t = t*beta;
                 f_calls = f_calls + 1;
@@ -248,10 +277,13 @@ function [objective, control_parameters, final_state] = BacktrackLineMethod(sens
         end
            
         objective = offset_objective;
-        control_parameters = control_parameters - t*gradient/hessian; %2e-16
+        independent_variables = independent_variables - t*gradient/hessian; %2e-16
         gradient = offset_gradient;
         hessian = offset_hessian;
-        uT.Data(1+i,:) = [i f_calls t objective final_state(1:3) control_parameters(1:3)];
+        if objective_function == "radius_time_objective"
+            dt = independent_variables(end);
+        end
+        uT.Data(1+i,:) = [i f_calls t objective final_state(1:3) dt independent_variables(1:3)];
         drawnow
         if or(f_calls >= 10, offset_objective <= limit)
             break
@@ -260,9 +292,12 @@ function [objective, control_parameters, final_state] = BacktrackLineMethod(sens
     
     end_totaltime = toc(start_totaltime)
     
-    function [obj, grad, hessian, state] = calc_obj_grad(control_parameters)
-        [obj, grad, hessian, state] = sensitivity_method(dynamics_fun, control_parameters, t0_state, ref_altitude, initial_time_step, num_steps, h, use_hessian);
+    function [obj, grad, hessian, state] = calc_obj_grad(independent_variables)
+        if objective_function == "radius_time_objective"
+            [obj, grad, hessian, state] = sensitivity_method(dynamics_fun, objective_function, independent_variables, t0_state, ref_altitude, independent_variables(end), num_steps, h, use_hessian);
+        else
+            [obj, grad, hessian, state] = sensitivity_method(dynamics_fun, objective_function, independent_variables, t0_state, ref_altitude, dt, num_steps, h, use_hessian);
+        end
     end
-
 end
 
