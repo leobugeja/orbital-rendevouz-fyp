@@ -817,9 +817,13 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
             out=C.zn(2^(n-1)+1);
         end
         
-        function out = CXn(C,imgn_parts)
-            if or(isnumeric(C) , max(imgn_parts) > log2(length(C.zn)))
-                out = 0;
+        function out = CXN(C,imgn_parts)
+            % This function extracts the coefficient of the user inputed imaginary parts contained within imgn_parts array.
+            % Ex: CXn(C,[1 2 4]) will extract the i1i2i4 coefficient of C. As the imaginary parts are commutitative e.g. i1i2i4 =
+            % i4i1i2, the ordering of the parts in imgn_parts array does not matter.
+
+            if isnumeric(C) || max(imgn_parts) > log2(length(C.zn)) || any(imgn_parts < 1)
+                error('input not in required form or out of bounds')
             else
                 index = 1;
                 for n = imgn_parts
