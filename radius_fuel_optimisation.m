@@ -39,8 +39,10 @@ constraint_radius = 1;
 %[objective, independent_variables, final_state] = BacktrackLineMethod(@complex_trajectory, @nonlin_eqn, 'radius_objective', [0.001, 0.001, -0.001], [-4000 -10000 0 0 3 10], 400e3, 5, 1000, 1e-15, false)
 
 %plot_trajectories([-0.007698326880490,-6.657344256249828e-04,-9.379846073813817e-04,7.628337504630399e+03/2000], @lin_eq, "lagrange_fuel_radius_final_burn", [0.001, 0.001, -0.001], [4000 0 0 0 -2 2], 400e3, 7628/2000, 2000, 1e-7, true, "3d_plots");
-plot_trajectories([0.006683775731408,0.001481066172619,-3.068838511224377e-04,2.726028989948144e+03/2000], @lin_eq, "lagrange_fuel_radius_final_burn", [0.001, 0.001, -0.001], [-4000 -10000 0 0 3 10], 400e3, 2.726028989948144e+03/2000, 2000, 1e-7, true, "ECEF_position");
-%plot_trajectories([-0.007698326880490,-6.657344256249828e-04,-9.379846073813817e-04,7.628337504630399e+03/2000], @lin_eq, "lagrange_fuel_radius_final_burn", [0.001, 0.001, -0.001], [4000 0 0 0 -2 2], 400e3, 2.726028989948144e+03/2000, 2000, 1e-7, true, "sensitivity_quiver");
+%plot_trajectories([0.006683775731408,0.001481066172619,-3.068838511224377e-04,2.726028989948144e+03/2000], @lin_eq, "lagrange_fuel_radius_final_burn", [0.001, 0.001, -0.001], [-4000 -10000 0 0 3 10], 400e3, 2.726028989948144e+03/2000, 2000, 1e-7, true, "ECEF_position");
+plot_trajectories([-0.007698326880490,-6.657344256249828e-04,-9.379846073813817e-04,7.628337504630399e+03/2000], @lin_eq, "lagrange_fuel_radius_final_burn", [0.001, 0.001, -0.001], [4000 0 0 0 -2 2], 400e3, 2.726028989948144e+03/2000, 2000, 1e-7, true, "sensitivity_quiver");
+
+%plot_trajectories([0,0,0,7.628337504630399e+03/2000], @lin_eq, "lagrange_fuel_radius_final_burn", [0, 0, 0], [0 0 0 0 0 0.1], 400e3, 2.726028989948144e+03/2000, 2000, 1e-7, true, "3d_plots");
 
 %sensitivity_accuracy(@nonlin_eqn, 'radius_objective', [0.001, 0.001, -0.001], [-4000 -10000 0 0 3 10], 400e3, 5, 1000, true)
 function sensitivity_accuracy(dynamics_fun, objective_function, variables, t0_state, ref_altitude, time_step, num_steps, use_hessian)
