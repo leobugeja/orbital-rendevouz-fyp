@@ -1,7 +1,7 @@
 clear
 clc
 close all force
-addpath('multicomplex')
+addpath('multicomplex_class')
 
 back_track_line_method = "newton_raphson"; % or "gradient_descent"
 sensitivity_method = @fdTrajectory; % for finite difference method, alternatively use @mxTrajectory for multicomplex step method
