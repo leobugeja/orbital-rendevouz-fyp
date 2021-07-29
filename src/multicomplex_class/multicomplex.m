@@ -833,59 +833,9 @@ classdef multicomplex % Of the form zn:[a1,a2,...,an]
             end
         end
         
-        function out = CX2(C,im,in)
-            
-            % This function extracts the coefficient of the user inputed imaginary part inim. C is the multicomplex number
-            % you want to extract the coefficient of. Ex: CX2(C,3,4) extracts the i3i4 coefficient of C.
-            % It is useful for second partial derivative calculation.
-            
-            if im > in
-                store = in;
-                in = im;
-                im = store;
-            end
-            if in > log2(length(C.zn))
-                error('input not in required form or out of bounds')
-            end
-            
-            cj=1.5;
-            val=4;
-            w=2;
-            u=1;
-            ci=0.5;
-            
-            for j=2:in
-                for i=1:im
-                    
-                    if j-w == 1
-                        
-                        cj=(2*cj)-1;
-                        
-                        val=val+cj;
-                        
-                        ci=0.5;
-                        
-                    elseif i-u == 1
-                        
-                        ci=2*ci;
-                        
-                        val=val+ci;
-                        
-                    end
-                    
-                    w=j;
-                    u=i;
-                    
-                    if j-i == 1
-                        break
-                    end
-                    
-                end
-                
-            end
-            
-            out=C.zn(val);
-            
+        function out = CX2(C,im,in) 
+            % Function to enable legacy code using CX2 function work with new CXN function
+            out = CXN(C, [im, in]);
         end
         
         
